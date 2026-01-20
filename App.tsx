@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { Transaction, TransactionCategory, Budget, SavingsGoal, AuditStatus } from './types';
 import { INITIAL_TRANSACTIONS } from './constants';
@@ -8,9 +9,14 @@ import SavingsGoalTracker from './components/SavingsGoalTracker';
 import ForensicIntelligence from './components/ForensicIntelligence';
 import HistoricalLedger from './components/HistoricalLedger';
 import FloatingChat from './components/FloatingChat';
+import BurnTicker from './components/BurnTicker';
+import PersonaAvatar from './components/PersonaAvatar';
+import BossBattle from './components/BossBattle';
+import PixelIcon from './components/PixelIcon';
+import GameManual from './components/GameManual';
 import { UserProfile } from './services/geminiService';
 
-type View = 'dashboard' | 'vibe-check' | 'receipts' | 'sensei';
+type View = 'dashboard' | 'vibe-check' | 'receipts' | 'sensei' | 'manual';
 type TimeFrame = 'current-month' | 'last-30' | 'all';
 
 const App: React.FC = () => {
@@ -87,10 +93,34 @@ const App: React.FC = () => {
     const totalIncome = transactions.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0);
     const totalExpense = transactions.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
 
+    // Calc Burn velocity
+    const uniqueDays = new Set(filteredTransactions.filter(t => t.type === 'expense').map(t => t.date)).size || 1;
+    const velocity = expenses / uniqueDays;
+
+    // Calc Efficiency score for persona
+    const microCount = filteredTransactions.filter(t => t.type === 'expense' && t.amount < 500).length;
+    let efficiency = 100 - (microCount * 2) - ((expenses / (income || 1)) * 50);
+    efficiency = Math.max(10, Math.min(100, efficiency));
+
+    // Calculate level based on verified transactions (progression)
+    const verifiedCount = transactions.filter(t => t.auditStatus === 'verified').length;
+    const level = Math.floor(verifiedCount / 3) + 1;
+
+    // Top merchant
+    const merchants: Record<string, number> = {};
+    filteredTransactions.filter(t => t.type === 'expense').forEach(t => {
+      merchants[t.description] = (merchants[t.description] || 0) + t.amount;
+    });
+    const topMerchant = Object.entries(merchants).sort((a,b) => b[1] - a[1])[0]?.[0] || 'Unknown';
+
     return { 
       income, 
       expenses, 
       balance: totalIncome - totalExpense,
+      velocity,
+      efficiency,
+      level,
+      topMerchant,
       periodLabel: timeFrame === 'current-month' ? 'This Month' : 
                    timeFrame === 'last-30' ? 'Last 30 Days' : 'All Time'
     };
@@ -102,13 +132,15 @@ const App: React.FC = () => {
   const addBulkTransactions = (ts: Transaction[]) => setTransactions(prev => [...ts.map(t => ({...t, auditStatus: t.auditStatus || 'pending'})), ...prev]);
   const deleteTransaction = (id: string) => setTransactions(prev => prev.filter(t => t.id !== id));
   const updateTransactionStatus = (id: string, status: AuditStatus) => setTransactions(prev => prev.map(t => t.id === id ? { ...t, auditStatus: status } : t));
+  
   const addBudget = (category: TransactionCategory | string, limit: number) => {
     const id = Math.random().toString(36).substr(2, 9);
     setBudgets(prev => [...prev.filter(b => b.category !== category), { id, category, limit }]);
   };
+
   const addGoal = () => {
-    const name = prompt('Goal name (e.g., Sneakers, Trip):');
-    const target = prompt('Target amount in ₹:');
+    const name = prompt('Quest Name (e.g., Sneakers, Trip):');
+    const target = prompt('Target Loot (₹):');
     if (name && target) {
       setGoals(prev => [...prev, {
         id: Math.random().toString(36).substr(2, 9),
@@ -119,109 +151,140 @@ const App: React.FC = () => {
     }
   };
 
+  const updateGoal = (id: string, updates: Partial<SavingsGoal>) => {
+    setGoals(prev => prev.map(g => g.id === id ? { ...g, ...updates } : g));
+  };
+
+  const deleteGoal = (id: string) => {
+    if (confirm('Abandon this side quest?')) {
+      setGoals(prev => prev.filter(g => g.id !== id));
+    }
+  };
+
   return (
-    <div className="flex min-h-screen bg-[#020617] text-white relative overflow-hidden font-sans">
-      {/* Background Glows */}
-      <div className="fixed top-[-10%] left-[-10%] w-[50%] h-[50%] bg-blue-600/10 blur-[120px] rounded-full pointer-events-none"></div>
-      <div className="fixed bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-indigo-600/10 blur-[120px] rounded-full pointer-events-none"></div>
+    <div className="flex flex-col min-h-screen bg-[#020617] text-white relative overflow-hidden font-sans">
+      <BurnTicker velocity={stats.velocity} topMerchant={stats.topMerchant} efficiency={stats.efficiency} />
 
-      {/* Sidebar */}
-      <nav className="w-20 lg:w-64 bg-slate-900/40 backdrop-blur-3xl border-r border-white/5 flex flex-col items-center lg:items-stretch p-4 lg:p-6 shrink-0 z-[60]">
-        <div className="mb-10 flex items-center gap-3 lg:px-2">
-          <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-700 rounded-xl flex items-center justify-center text-white font-black text-xl shadow-[0_0_20px_rgba(37,99,235,0.4)] hover:scale-110 transition-transform cursor-pointer">FV</div>
-          <h1 className="hidden lg:block text-xl font-black text-white tracking-tighter uppercase italic">Finvue<span className="text-blue-500">.</span>Ai</h1>
-        </div>
+      <div className="flex flex-1 overflow-hidden">
+        {/* Background Glows */}
+        <div className="fixed top-[-10%] left-[-10%] w-[50%] h-[50%] bg-blue-600/10 blur-[120px] rounded-full pointer-events-none"></div>
+        <div className="fixed bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-indigo-600/10 blur-[120px] rounded-full pointer-events-none"></div>
 
-        <div className="space-y-2 flex-1 w-full">
-          {[
-            { id: 'dashboard', label: 'Dash', icon: '🏠' },
-            { id: 'vibe-check', label: 'Vibe Check', icon: '🔋' },
-            { id: 'receipts', label: 'Receipts', icon: '🧾' },
-            { id: 'sensei', label: 'Wealth Sensei', icon: '🧘' }
-          ].map((item) => (
-            <button 
-              key={item.id}
-              onClick={() => setCurrentView(item.id as View)}
-              className={`w-full flex items-center justify-center lg:justify-start gap-4 px-4 py-3.5 rounded-2xl transition-all group ${currentView === item.id ? 'bg-white/10 text-white shadow-xl shadow-black/20' : 'text-slate-500 hover:text-slate-300 hover:bg-white/5'}`}
-            >
-              <span className="text-xl">{item.icon}</span>
-              <span className="hidden lg:block text-[10px] font-black uppercase tracking-widest">{item.label}</span>
-            </button>
-          ))}
-        </div>
-
-        <div className="p-4 bg-slate-800/30 rounded-2xl hidden lg:block border border-white/5 mt-auto">
-          <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">Current Bag</p>
-          <p className="text-lg font-black text-white">₹{formatCurrency(stats.balance)}</p>
-        </div>
-      </nav>
-
-      {/* Main Content */}
-      <main className="flex-1 overflow-y-auto custom-scrollbar relative z-10 pt-6 lg:pt-0">
-        {currentView === 'dashboard' && (
-          <div className="p-6 lg:p-10 max-w-7xl mx-auto space-y-10 animate-in fade-in duration-700">
-            <header className="flex flex-col md:flex-row md:items-end justify-between gap-6">
-              <div>
-                <h2 className="text-5xl font-black text-white tracking-tighter italic">DASHBOARD</h2>
-                <p className="text-slate-500 font-bold uppercase tracking-[0.2em] mt-1 text-[10px]">Real-time spending overview // {stats.periodLabel}</p>
-              </div>
-              <div className="flex bg-slate-900/60 p-1 rounded-2xl border border-white/5 shadow-2xl backdrop-blur-xl">
-                {(['current-month', 'last-30', 'all'] as const).map((opt) => (
-                  <button
-                    key={opt}
-                    onClick={() => setTimeFrame(opt)}
-                    className={`px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${timeFrame === opt ? 'bg-white/10 text-white' : 'text-slate-500 hover:text-slate-400'}`}
-                  >
-                    {opt.replace('-', ' ')}
-                  </button>
-                ))}
-              </div>
-            </header>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <div className="bg-slate-900/40 backdrop-blur-2xl p-8 rounded-[2.5rem] border border-white/5 shadow-2xl group hover:border-emerald-500/30 transition-all">
-                <span className="text-[10px] font-black text-emerald-500 uppercase tracking-widest block mb-4">Cash Inflow</span>
-                <p className="text-3xl font-black text-white">₹{formatCurrency(stats.income)}</p>
-              </div>
-              <div className="bg-slate-900/40 backdrop-blur-2xl p-8 rounded-[2.5rem] border border-white/5 shadow-2xl group hover:border-rose-500/30 transition-all">
-                <span className="text-[10px] font-black text-rose-500 uppercase tracking-widest block mb-4">Cash Burn</span>
-                <p className="text-3xl font-black text-white">₹{formatCurrency(stats.expenses)}</p>
-              </div>
-              <div className="bg-slate-900/40 backdrop-blur-2xl p-8 rounded-[2.5rem] border border-white/5 shadow-2xl group hover:border-blue-500/30 transition-all">
-                <span className="text-[10px] font-black text-blue-500 uppercase tracking-widest block mb-4">Savings Cap</span>
-                <p className="text-3xl font-black text-white">₹{formatCurrency(Math.max(0, stats.income - stats.expenses))}</p>
-              </div>
-            </div>
-
-            <DashboardCharts transactions={filteredTransactions} />
-
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-              <BudgetTracker transactions={filteredTransactions} budgets={budgets} onAddBudget={addBudget} />
-              <SavingsGoalTracker goals={goals} onAddGoal={addGoal} />
-            </div>
+        {/* Sidebar */}
+        <nav className="w-20 lg:w-64 bg-slate-900/40 backdrop-blur-3xl border-r border-white/5 flex flex-col items-center lg:items-stretch p-4 lg:p-6 shrink-0 z-[60]">
+          <div className="mb-10 flex items-center gap-3 lg:px-2">
+            <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-700 rounded-xl flex items-center justify-center text-white font-black text-xl shadow-[0_0_20px_rgba(37,99,235,0.4)] hover:scale-110 transition-transform cursor-pointer">FV</div>
+            <h1 className="hidden lg:block text-xl font-black text-white tracking-tighter uppercase italic">Finvue<span className="text-blue-500">.</span>Ai</h1>
           </div>
-        )}
 
-        {currentView === 'vibe-check' && <ForensicIntelligence transactions={transactions} />}
-        {currentView === 'receipts' && (
-          <HistoricalLedger 
-            transactions={transactions} 
-            onDelete={deleteTransaction} 
-            onAdd={addTransaction} 
-            onBulkAdd={addBulkTransactions}
-            onUpdateStatus={updateTransactionStatus}
-          />
-        )}
-        {currentView === 'sensei' && (
-          <AIAdvisor 
-            transactions={transactions} 
-            budgets={budgets} 
-            goals={goals} 
-            profile={profile}
-            onProfileUpdate={setProfile}
-          />
-        )}
-      </main>
+          <div className="space-y-2 flex-1 w-full overflow-y-auto no-scrollbar">
+            {[
+              { id: 'dashboard', label: 'Dash', type: 'home' as const },
+              { id: 'vibe-check', label: 'Vibe Check', type: 'vibe' as const },
+              { id: 'receipts', label: 'Receipts', type: 'ledger' as const },
+              { id: 'sensei', label: 'Wealth Sensei', type: 'sensei' as const },
+              { id: 'manual', label: 'The Manual', type: 'quest' as const }
+            ].map((item) => (
+              <button 
+                key={item.id}
+                onClick={() => setCurrentView(item.id as View)}
+                className={`w-full flex items-center justify-center lg:justify-start gap-4 px-4 py-3.5 rounded-2xl transition-all group ${currentView === item.id ? 'bg-white/10 text-white shadow-xl shadow-black/20' : 'text-slate-500 hover:text-slate-300 hover:bg-white/5'}`}
+              >
+                <PixelIcon 
+                  type={item.type} 
+                  size={20} 
+                  className={currentView === item.id ? 'text-blue-500' : 'text-slate-500 group-hover:text-slate-300'} 
+                />
+                <span className="hidden lg:block text-[10px] font-black uppercase tracking-widest">{item.label}</span>
+              </button>
+            ))}
+          </div>
+
+          <div className="mt-auto pt-6">
+            <PersonaAvatar score={stats.efficiency} level={stats.level} />
+          </div>
+        </nav>
+
+        {/* Main Content */}
+        <main className="flex-1 overflow-y-auto custom-scrollbar relative z-10 pt-6 lg:pt-0">
+          {currentView === 'dashboard' && (
+            <div className="p-6 lg:p-10 max-w-7xl mx-auto space-y-10 animate-in fade-in duration-700">
+              <header className="flex flex-col md:flex-row md:items-end justify-between gap-6">
+                <div>
+                  <h2 className="text-5xl font-black text-white tracking-tighter italic">DASHBOARD</h2>
+                  <p className="text-slate-500 font-bold uppercase tracking-[0.2em] mt-1 text-[10px]">Real-time spending overview // {stats.periodLabel}</p>
+                </div>
+                <div className="flex bg-slate-900/60 p-1 rounded-2xl border border-white/5 shadow-2xl backdrop-blur-xl">
+                  {(['current-month', 'last-30', 'all'] as const).map((opt) => (
+                    <button
+                      key={opt}
+                      onClick={() => setTimeFrame(opt)}
+                      className={`px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${timeFrame === opt ? 'bg-white/10 text-white' : 'text-slate-500 hover:text-slate-400'}`}
+                    >
+                      {opt.replace('-', ' ')}
+                    </button>
+                  ))}
+                </div>
+              </header>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="bg-slate-900/40 backdrop-blur-2xl p-8 rounded-[2.5rem] border border-white/5 shadow-2xl group hover:border-emerald-500/30 transition-all">
+                  <span className="text-[10px] font-black text-emerald-500 uppercase tracking-widest block mb-4">Cash Inflow</span>
+                  <p className="text-3xl font-black text-white">₹{formatCurrency(stats.income)}</p>
+                </div>
+                <div className="bg-slate-900/40 backdrop-blur-2xl p-8 rounded-[2.5rem] border border-white/5 shadow-2xl group hover:border-rose-500/30 transition-all">
+                  <span className="text-[10px] font-black text-rose-500 uppercase tracking-widest block mb-4">Cash Burn</span>
+                  <p className="text-3xl font-black text-white">₹{formatCurrency(stats.expenses)}</p>
+                </div>
+                <div className="bg-slate-900/40 backdrop-blur-2xl p-8 rounded-[2.5rem] border border-white/5 shadow-2xl group hover:border-blue-500/30 transition-all">
+                  <span className="text-[10px] font-black text-blue-500 uppercase tracking-widest block mb-4">Net Balance</span>
+                  <p className="text-3xl font-black text-white">₹{formatCurrency(stats.balance)}</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+                <div className="lg:col-span-8">
+                  <DashboardCharts transactions={filteredTransactions} />
+                </div>
+                <div className="lg:col-span-4">
+                  <BossBattle transactions={filteredTransactions} profile={profile} />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                <BudgetTracker transactions={filteredTransactions} budgets={budgets} onAddBudget={addBudget} />
+                <SavingsGoalTracker 
+                  goals={goals} 
+                  onAddGoal={addGoal} 
+                  onUpdateGoal={updateGoal} 
+                  onDeleteGoal={deleteGoal} 
+                />
+              </div>
+            </div>
+          )}
+
+          {currentView === 'vibe-check' && <ForensicIntelligence transactions={transactions} />}
+          {currentView === 'receipts' && (
+            <HistoricalLedger 
+              transactions={transactions} 
+              onDelete={deleteTransaction} 
+              onAdd={addTransaction} 
+              onBulkAdd={addBulkTransactions}
+              onUpdateStatus={updateTransactionStatus}
+            />
+          )}
+          {currentView === 'sensei' && (
+            <AIAdvisor 
+              transactions={transactions} 
+              budgets={budgets} 
+              goals={goals} 
+              profile={profile}
+              onProfileUpdate={setProfile}
+            />
+          )}
+          {currentView === 'manual' && <GameManual />}
+        </main>
+      </div>
 
       <FloatingChat transactions={transactions} budgets={budgets} goals={goals} profile={profile} />
     </div>

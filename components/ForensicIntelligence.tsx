@@ -57,14 +57,17 @@ const ForensicIntelligence: React.FC<ForensicIntelligenceProps> = ({ transaction
     const splurgeFactor = avgWeekday > 0 ? (avgWeekend / avgWeekday).toFixed(1) : '1.0';
 
     // 3. Concentration
-    const freq = expenses.reduce((acc: Record<string, {count: number, total: number}>, t) => {
-      if (!acc[t.description]) acc[t.description] = { count: 0, total: 0 };
-      acc[t.description].count++;
-      acc[t.description].total += t.amount;
+    // Fixed: Explicitly type the reduce accumulator for frequency calculation and merchant sorting to resolve TS errors.
+    const freq = expenses.reduce((acc: Record<string, {count: number, total: number}>, t: Transaction) => {
+      const desc = t.description;
+      if (!acc[desc]) acc[desc] = { count: 0, total: 0 };
+      acc[desc].count++;
+      acc[desc].total += t.amount;
       return acc;
-    }, {});
+    }, {} as Record<string, {count: number, total: number}>);
     
-    let topMerchants = Object.entries(freq)
+    // Explicitly cast entries to handle case where Object.entries defaults to unknown values in some environments.
+    const topMerchants = (Object.entries(freq) as [string, {count: number, total: number}][])
       .sort((a, b) => b[1].total - a[1].total)
       .slice(0, 5);
 
@@ -166,7 +169,7 @@ const ForensicIntelligence: React.FC<ForensicIntelligenceProps> = ({ transaction
             </svg>
             <div className="absolute inset-0 flex flex-col items-center justify-center pt-2">
               <span className="text-7xl font-black tracking-tighter tabular-nums text-white">{Math.round(analysis.efficiencyScore)}</span>
-              <span className="text-[10px] font-black uppercase tracking-[0.4em] text-slate-500 mt-[-4px]">Efficiency</span>
+              <span className="text-[10px] font-black uppercase tracking-[0.4em] text-slate-500 mt-0.5">Efficiency</span>
             </div>
           </div>
           

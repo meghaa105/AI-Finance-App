@@ -1,6 +1,8 @@
+
 import React, { useState } from 'react';
 import { Transaction, FinancialAnalysis, Budget, SavingsGoal, TransactionCategory } from '../types';
 import { geminiService, UserProfile } from '../services/geminiService';
+import PixelIcon from './PixelIcon';
 
 interface AIAdvisorProps {
   transactions: Transaction[];
@@ -31,8 +33,8 @@ const AIAdvisor: React.FC<AIAdvisorProps> = ({ transactions, budgets, goals, pro
     try {
       let result = "";
       if (pendingMode === 'portfolio') {
-        const contextStr = `Txs: ${transactions.length}, Budgets: ${budgets.length}, Goals: ${goals.length}`;
-        result = await geminiService.analyzeRawData(`Audit my entire bag: ${JSON.stringify({transactions, budgets, goals})}`, profile);
+        // Specifically including Goals in the description for the AI to pick up
+        result = await geminiService.analyzeRawData(`Audit my entire bag. I have ${transactions.length} transactions, ${budgets.length} budgets, and active side quests: ${goals.map(g => g.name).join(', ')}. Details: ${JSON.stringify({transactions, budgets, goals})}`, profile);
       } else if (pendingMode === 'category_audit') {
         const filtered = transactions.filter(t => t.category === targetCategory);
         result = await geminiService.askFinanceQuestion(`Audit my **${targetCategory}** spending. Be real with me. Is it valid or an L?`, filtered, profile);
@@ -60,11 +62,30 @@ const AIAdvisor: React.FC<AIAdvisorProps> = ({ transactions, budgets, goals, pro
     if (!text) return null;
     return text.split('\n').map((line, index) => {
       const trimmedLine = line.trim();
+      
+      // Special handling for the Quest Reality Check section
+      if (trimmedLine.toUpperCase().includes('QUEST_REALITY_CHECK') || trimmedLine.includes('Side Quests')) {
+        return (
+          <div key={index} className="my-8 p-6 bg-blue-600/10 border-2 border-blue-500/30 rounded-[2rem] relative overflow-hidden group">
+            <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+              <PixelIcon type="quest" size={48} className="text-blue-500" />
+            </div>
+            <h3 className="text-blue-400 font-black text-sm uppercase tracking-[0.4em] mb-4 flex items-center gap-3">
+              <PixelIcon type="sparkle" size={16} className="animate-pulse" />
+              {parseMarkdown(trimmedLine.replace('###', ''))}
+            </h3>
+          </div>
+        );
+      }
+
       if (trimmedLine.startsWith('###')) {
         return <h3 key={index} className="text-blue-500 font-black text-xs uppercase tracking-[0.4em] mt-10 mb-6 border-b border-white/5 pb-2">{parseMarkdown(trimmedLine.replace('###', ''))}</h3>;
       }
       if (trimmedLine.startsWith('-') || trimmedLine.startsWith('*')) {
         return <div key={index} className="flex gap-4 mb-3 items-start"><span className="w-1.5 h-1.5 mt-1.5 bg-blue-600 rounded-full shrink-0"></span><div className="text-slate-300 text-sm font-medium leading-relaxed">{parseMarkdown(trimmedLine.replace(/^[-*]+/, ''))}</div></div>;
+      }
+      if (trimmedLine.startsWith('|')) {
+        return <div key={index} className="overflow-x-auto my-4"><table className="w-full text-xs text-left border-collapse bg-white/5 rounded-xl"><tbody className="divide-y divide-white/10">{parseMarkdown(trimmedLine)}</tbody></table></div>;
       }
       return <p key={index} className="text-slate-400 text-sm leading-relaxed mb-4">{parseMarkdown(trimmedLine)}</p>;
     });
@@ -75,7 +96,9 @@ const AIAdvisor: React.FC<AIAdvisorProps> = ({ transactions, budgets, goals, pro
       <header className="px-8 py-8 border-b border-white/5 bg-slate-950/60 backdrop-blur-3xl sticky top-0 z-[50]">
         <div className="max-w-6xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-5">
-            <div className="w-12 h-12 bg-gradient-to-br from-indigo-500 to-blue-700 rounded-2xl flex items-center justify-center text-2xl shadow-2xl">🧘</div>
+            <div className="w-12 h-12 bg-gradient-to-br from-indigo-500 to-blue-700 rounded-2xl flex items-center justify-center shadow-2xl">
+              <PixelIcon type="sensei" size={32} className="text-white" />
+            </div>
             <div>
               <h2 className="text-2xl font-black tracking-tighter">Wealth Sensei</h2>
               <p className="text-[8px] font-black uppercase tracking-[0.4em] text-slate-500 mt-0.5">Zen Wealth Strategy</p>
@@ -90,9 +113,9 @@ const AIAdvisor: React.FC<AIAdvisorProps> = ({ transactions, budgets, goals, pro
           {mode === 'selection' && (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-8 pt-10">
               {[
-                { id: 'portfolio', title: 'The Full Audit', desc: 'Savage pulse check on all your assets.', emoji: '📈', color: 'blue' },
-                { id: 'category_audit', title: 'Category Heat', desc: 'Is your lifestyle inflation valid?', emoji: '🔥', color: 'indigo' },
-                { id: 'audit', title: 'Text Forensic', desc: 'Dump raw data, get the truth.', emoji: '🧾', color: 'emerald' }
+                { id: 'portfolio', title: 'The Full Audit', desc: 'Savage pulse check on all your assets.', type: 'chart' as const, color: 'blue' },
+                { id: 'category_audit', title: 'Category Heat', desc: 'Is your lifestyle inflation valid?', type: 'sparkle' as const, color: 'indigo' },
+                { id: 'audit', title: 'Text Forensic', desc: 'Dump raw data, get the truth.', type: 'ledger' as const, color: 'emerald' }
               ].map((card) => (
                 <button 
                   key={card.id}
@@ -102,8 +125,12 @@ const AIAdvisor: React.FC<AIAdvisorProps> = ({ transactions, budgets, goals, pro
                   }}
                   className="group p-10 bg-slate-900/40 border border-white/5 rounded-[3rem] text-left hover:border-blue-500/40 transition-all shadow-2xl relative overflow-hidden"
                 >
-                  <div className="absolute -right-4 -top-4 text-8xl opacity-5 group-hover:opacity-10 transition-opacity">{card.emoji}</div>
-                  <div className="text-4xl mb-8">{card.emoji}</div>
+                  <div className="absolute -right-4 -top-4 opacity-5 group-hover:opacity-10 transition-opacity">
+                    <PixelIcon type={card.type} size={128} className="text-white" />
+                  </div>
+                  <div className="mb-8">
+                    <PixelIcon type={card.type} size={48} className={`text-${card.color}-500`} />
+                  </div>
                   <h3 className="text-xl font-black mb-3">{card.title}</h3>
                   <p className="text-slate-500 text-[10px] font-black uppercase tracking-widest">{card.desc}</p>
                 </button>
@@ -114,7 +141,10 @@ const AIAdvisor: React.FC<AIAdvisorProps> = ({ transactions, budgets, goals, pro
           {mode === 'profiling' && (
             <div className="max-w-xl mx-auto pt-10">
               <div className="bg-slate-900/60 border border-white/5 rounded-[3rem] p-12 space-y-10 shadow-2xl backdrop-blur-3xl">
-                <h2 className="text-3xl font-black tracking-tighter">Strategic Intent 🎯</h2>
+                <div className="flex items-center gap-4">
+                  <h2 className="text-3xl font-black tracking-tighter">Strategic Intent</h2>
+                  <PixelIcon type="trophy" size={24} className="text-amber-500" />
+                </div>
                 
                 {pendingMode === 'category_audit' && (
                   <div className="space-y-4">
@@ -158,7 +188,9 @@ const AIAdvisor: React.FC<AIAdvisorProps> = ({ transactions, budgets, goals, pro
 
           {loading && (
             <div className="flex flex-col items-center justify-center py-40 animate-in fade-in zoom-in duration-500">
-              <div className="w-20 h-20 bg-slate-900/60 rounded-full flex items-center justify-center border-4 border-blue-500/20 border-t-blue-500 animate-spin mb-10"></div>
+              <div className="w-20 h-20 bg-slate-900/60 rounded-full flex items-center justify-center border-4 border-blue-500/20 border-t-blue-500 animate-spin mb-10">
+                <PixelIcon type="sensei" size={32} className="text-blue-500" />
+              </div>
               <p className="text-slate-500 text-[10px] font-black uppercase tracking-[0.6em] animate-pulse">Consulting the Oracle...</p>
             </div>
           )}

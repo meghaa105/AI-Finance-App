@@ -45,3 +45,16 @@ export interface FinancialAnalysis {
   recommendations: string[];
   savingsPotential: number;
 }
+
+export type PersonaRank = 'Broke Intern' | 'Hustle Scholar' | 'Bag Secured' | 'Wealth Architect';
+
+export interface Challenge {
+  id: string;
+  type: 'no-spend' | 'savings-sprint' | 'budget-defense';
+  title: string;
+  description: string;
+  reward: number;
+  isActive: boolean;
+  startDate: string;
+  status: 'active' | 'failed' | 'conquered';
+}
