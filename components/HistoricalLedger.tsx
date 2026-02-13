@@ -5,17 +5,19 @@ import TransactionForm from './TransactionForm';
 interface HistoricalLedgerProps {
   transactions: Transaction[];
   onDelete: (id: string) => void;
+  onDeleteAll?: () => void;
   onAdd: (t: Transaction) => void;
   onBulkAdd: (ts: Transaction[]) => void;
   onUpdateStatus?: (id: string, status: AuditStatus) => void;
 }
 
-const HistoricalLedger: React.FC<HistoricalLedgerProps> = ({ transactions, onDelete, onAdd, onBulkAdd, onUpdateStatus }) => {
+const HistoricalLedger: React.FC<HistoricalLedgerProps> = ({ transactions, onDelete, onDeleteAll, onAdd, onBulkAdd, onUpdateStatus }) => {
   const [filter, setFilter] = useState<'all' | 'expense' | 'income'>('all');
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+  const [confirmPurge, setConfirmPurge] = useState(false);
 
   const formatCurrency = (val: number) => val.toLocaleString('en-IN');
 
@@ -35,6 +37,11 @@ const HistoricalLedger: React.FC<HistoricalLedgerProps> = ({ transactions, onDel
     setActiveMenuId(null);
   };
 
+  const handlePurge = () => {
+    onDeleteAll?.();
+    setConfirmPurge(false);
+  };
+
   const formatCategoryDisplay = (category: string) => {
     if (!category) return 'OTHER';
     return category.replace(/[_-]/g, ' ').toUpperCase();
@@ -47,6 +54,35 @@ const HistoricalLedger: React.FC<HistoricalLedgerProps> = ({ transactions, onDel
           <h2 className="text-4xl font-black text-white tracking-tighter">The Receipts 🧾</h2>
           <p className="text-slate-500 font-bold uppercase tracking-[0.2em] mt-1 text-[10px]">Your financial source of truth</p>
         </div>
+        
+        {transactions.length > 0 && onDeleteAll && (
+          <div className="relative group">
+            {!confirmPurge ? (
+              <button 
+                type="button"
+                onClick={(e) => { e.stopPropagation(); setConfirmPurge(true); }}
+                className="text-[9px] font-black uppercase tracking-[0.3em] text-rose-500 border border-rose-500/20 px-6 py-3 rounded-2xl bg-rose-500/5 hover:bg-rose-500/10 transition-all active:scale-95"
+              >
+                PURGE_ARCHIVES
+              </button>
+            ) : (
+              <div className="flex gap-2 animate-in slide-in-from-right-4 duration-300">
+                <button 
+                  onClick={(e) => { e.stopPropagation(); handlePurge(); }}
+                  className="text-[9px] font-black uppercase bg-rose-600 text-white px-6 py-3 rounded-2xl shadow-lg shadow-rose-600/20"
+                >
+                  CONFIRM_PURGE
+                </button>
+                <button 
+                  onClick={(e) => { e.stopPropagation(); setConfirmPurge(false); }}
+                  className="text-[9px] font-black uppercase bg-white/10 text-white px-6 py-3 rounded-2xl"
+                >
+                  ABORT
+                </button>
+              </div>
+            )}
+          </div>
+        )}
       </header>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
@@ -114,7 +150,7 @@ const HistoricalLedger: React.FC<HistoricalLedgerProps> = ({ transactions, onDel
                         <span className="text-sm font-black text-slate-200 group-hover:text-white transition-colors">{t.description}</span>
                       </td>
                       <td className="px-8 py-6">
-                        <span className={`px-2.5 py-1 rounded-lg text-[8px] font-black uppercase tracking-widest inline-block ${t.type === 'income' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-white/10 text-slate-400'}`}>
+                        <span className={`px-2.5 py-1 rounded-lg text-[8px] font-black uppercase tracking-widest inline-block ${t.type === 'income' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-white/10 text-slate-400'}`}>
                           {formatCategoryDisplay(t.category)}
                         </span>
                       </td>

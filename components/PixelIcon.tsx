@@ -1,7 +1,7 @@
 
 import React from 'react';
 
-type IconType = 'home' | 'vibe' | 'ledger' | 'sensei' | 'quest' | 'trophy' | 'skull' | 'ghost' | 'sparkle' | 'chart' | 'pie';
+type IconType = 'home' | 'vibe' | 'ledger' | 'sensei' | 'quest' | 'trophy' | 'skull' | 'ghost' | 'sparkle' | 'chart' | 'pie' | 'card';
 
 interface PixelIconProps {
   type: IconType;
@@ -56,6 +56,10 @@ const PixelIcon: React.FC<PixelIconProps> = ({ type, size = 24, className = "", 
       case 'pie':
         return (
           <path d="M8 2v6h6c0-3.3-2.7-6-6-6zM7 2c-3.3 0-6 2.7-6 6s2.7 6 6 6 6-2.7 6-6h-6v-6z" />
+        );
+      case 'card':
+        return (
+          <path d="M2 4h12v8h-12v-8zM4 6h3v1h-3v-1zM4 9h1v1h-1v-1zM6 9h1v1h-1v-1zM8 9h1v1h-1v-1z" />
         );
       default:
         return <path d="M2 2h12v12h-12z" />;

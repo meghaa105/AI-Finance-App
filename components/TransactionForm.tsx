@@ -45,9 +45,10 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ onAdd, onBulkAdd }) =
   const parseCSVDate = (dateStr: string) => {
     if (!dateStr) return new Date().toISOString().split('T')[0];
     
+    // Clean quotes and spaces
     let cleanStr = dateStr.trim().replace(/^"|"$/g, '');
-    cleanStr = cleanStr.replace(/Sept/i, 'Sep');
-
+    
+    // Handle DD-MM-YYYY (Common in Indian Bank CSVs)
     const dmyMatch = cleanStr.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/);
     if (dmyMatch) {
       const day = parseInt(dmyMatch[1], 10);
@@ -59,29 +60,11 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ onAdd, onBulkAdd }) =
       }
     }
 
+    // Fallback to standard JS parsing
     try {
       const date = new Date(cleanStr);
       if (!isNaN(date.getTime())) {
         return date.toISOString().split('T')[0];
-      }
-      
-      const parts = cleanStr.split(/[\s,/-]+/);
-      if (parts.length >= 3) {
-        const day = parseInt(parts[0]);
-        const monthStr = parts[1];
-        const year = parseInt(parts[2]);
-        
-        const months: Record<string, number> = {
-          jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5, 
-          jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11
-        };
-        
-        const m = months[monthStr.toLowerCase().substring(0, 3)];
-        if (!isNaN(day) && m !== undefined && !isNaN(year)) {
-          const fullYear = year < 100 ? 2000 + year : year;
-          const d = new Date(fullYear, m, day);
-          if (!isNaN(d.getTime())) return d.toISOString().split('T')[0];
-        }
       }
     } catch {
       // Continue to fallback
@@ -92,15 +75,20 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ onAdd, onBulkAdd }) =
 
   const mapCategory = (cat: string): string => {
     const raw = cat?.trim() || '';
-    const normalized = raw.toLowerCase();
+    const normalized = raw.toLowerCase().replace('_', ' ');
     
-    // Check for enum matches first
+    // Check for enum matches first by name or label
     for (const [key, value] of Object.entries(TransactionCategory)) {
-      if (value.toLowerCase() === normalized) return value;
+      if (value.toLowerCase() === normalized || key.toLowerCase() === normalized) return value;
     }
 
-    // If no direct match, return the raw string to be formatted by the viewer
-    return raw || TransactionCategory.OTHER;
+    // Specific mapping for common snake_case labels
+    if (normalized === 'food dining') return TransactionCategory.FOOD;
+    if (normalized === 'banking finance') return TransactionCategory.BANKING;
+    if (normalized === 'sports fitness') return TransactionCategory.HEALTH;
+
+    // Return properly formatted string if not in enum (types.ts allows string)
+    return raw.charAt(0).toUpperCase() + raw.slice(1).replace('_', ' ');
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -147,11 +135,11 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ onAdd, onBulkAdd }) =
       const newMapping = { ...mapping };
       headers.forEach((h, idx) => {
         const lower = h.toLowerCase();
-        if (lower.includes('date')) newMapping.date = idx;
+        if (lower === 'date') newMapping.date = idx;
         if (lower.includes('desc')) newMapping.description = idx;
-        if (lower.includes('amount')) newMapping.amount = idx;
-        if (lower.includes('type')) newMapping.type = idx;
-        if (lower.includes('cat')) newMapping.category = idx;
+        if (lower === 'amount') newMapping.amount = idx;
+        if (lower === 'type') newMapping.type = idx;
+        if (lower === 'category') newMapping.category = idx;
       });
       setMapping(newMapping);
       setImportStage('mapping');
@@ -163,16 +151,13 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ onAdd, onBulkAdd }) =
     return csvRows.slice(0, 5).map(row => {
       const rawDateValue = row[mapping.date] || '';
       const parsedDate = parseCSVDate(rawDateValue);
-      const isTodayAsFallback = rawDateValue && parsedDate === new Date().toISOString().split('T')[0] && !rawDateValue.includes(new Date().getFullYear().toString());
       
       return {
         date: parsedDate,
-        rawDate: rawDateValue,
         description: row[mapping.description] || 'N/A',
         amount: parseFloat((row[mapping.amount] || '0').replace(/[^0-9.]/g, '')),
         type: (row[mapping.type] || '').toLowerCase().includes('income') ? 'income' : 'expense' as 'income' | 'expense',
-        category: mapCategory(row[mapping.category] || ''),
-        parsingWarning: isTodayAsFallback
+        category: mapCategory(row[mapping.category] || '')
       };
     });
   }, [csvRows, mapping]);
@@ -186,8 +171,9 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ onAdd, onBulkAdd }) =
         date: parseCSVDate(row[mapping.date] || ''),
         description: (row[mapping.description] || 'N/A').trim(),
         amount: isNaN(amount) ? 0 : amount,
-        type: (row[mapping.type] || '').toLowerCase().includes('income') ? 'income' : 'expense' as 'income' | 'expense',
-        category: mapCategory(row[mapping.category] || '')
+        type: (row[mapping.type] || '').toLowerCase() === 'income' ? 'income' : 'expense' as 'income' | 'expense',
+        category: mapCategory(row[mapping.category] || ''),
+        auditStatus: 'pending'
       };
     });
 
@@ -196,7 +182,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ onAdd, onBulkAdd }) =
     setCsvRows([]);
     setCsvHeaders([]);
     if (fileInputRef.current) fileInputRef.current.value = '';
-    alert(`Successfully ingested ${finalTransactions.length} transactions.`);
+    alert(`INGESTION_COMPLETE: ${finalTransactions.length} records processed.`);
   };
 
   const handleSingleSubmit = (e: React.FormEvent) => {
@@ -210,7 +196,8 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ onAdd, onBulkAdd }) =
         description: formData.description,
         category: formData.category,
         date: formData.date,
-        type: formData.type
+        type: formData.type,
+        auditStatus: 'pending'
       });
       setFormData({
         amount: '',
@@ -231,13 +218,13 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ onAdd, onBulkAdd }) =
         <div className="mb-6 flex justify-between items-start">
           <div>
             <h3 className="text-xl font-black text-slate-900 tracking-tight">Statement Ingestion</h3>
-            <p className="text-xs text-slate-400 font-bold uppercase tracking-widest mt-1">Data Inflow Controller</p>
+            <p className="text-xs text-slate-400 font-bold uppercase tracking-widest mt-1">Direct Data Stream</p>
           </div>
           <button 
             onClick={() => setShowSingleForm(!showSingleForm)}
             className="text-[10px] font-black uppercase tracking-widest text-blue-600 hover:text-blue-700 transition-colors"
           >
-            {showSingleForm ? 'Bulk Upload' : 'Manual Entry'}
+            {showSingleForm ? 'BULK_UPLOAD' : 'MANUAL_ENTRY'}
           </button>
         </div>
 
@@ -251,8 +238,8 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ onAdd, onBulkAdd }) =
                   </svg>
                 </div>
                 <div className="space-y-2">
-                  <p className="text-sm font-black text-slate-800">Upload Bank Statement</p>
-                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">CSV Formats Supported</p>
+                  <p className="text-sm font-black text-slate-800">Upload Data.csv</p>
+                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Supports DD-MM-YYYY format</p>
                 </div>
                 
                 <button
@@ -260,7 +247,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ onAdd, onBulkAdd }) =
                   onClick={() => fileInputRef.current?.click()}
                   className="mt-6 px-8 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] shadow-lg shadow-blue-500/20 transition-all active:scale-95"
                 >
-                  Select File
+                  SELECT_SOURCE
                 </button>
                 <input
                   type="file"
@@ -277,7 +264,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ onAdd, onBulkAdd }) =
                 <div className="grid grid-cols-1 gap-4">
                   {(Object.keys(mapping) as Array<keyof MappingState>).map(key => (
                     <div key={key} className="flex flex-col gap-1">
-                      <label className="text-[9px] font-black uppercase tracking-widest text-slate-400">{key} Column</label>
+                      <label className="text-[9px] font-black uppercase tracking-widest text-slate-400">{key.toUpperCase()}_COL</label>
                       <select 
                         value={mapping[key]}
                         onChange={(e) => setMapping({...mapping, [key]: parseInt(e.target.value)})}
@@ -294,7 +281,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ onAdd, onBulkAdd }) =
                   onClick={() => setImportStage('preview')}
                   className="w-full py-3 bg-slate-900 text-white rounded-xl text-[10px] font-black uppercase tracking-[0.2em] hover:bg-slate-800 transition-all"
                 >
-                  Generate Preview
+                  VERIFY_SYNC_PREVIEW
                 </button>
               </div>
             )}
@@ -305,8 +292,8 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ onAdd, onBulkAdd }) =
                   {previewData.map((p, i) => (
                     <div key={i} className="p-3 bg-slate-50 rounded-xl border border-slate-100 flex justify-between items-center">
                       <div className="flex flex-col">
-                        <span className="text-[10px] font-bold text-slate-800">{p.description}</span>
-                        <span className="text-[8px] text-slate-400">{p.date}</span>
+                        <span className="text-[10px] font-bold text-slate-800 truncate max-w-[150px]">{p.description}</span>
+                        <span className="text-[8px] text-slate-400">{p.date} • {p.category}</span>
                       </div>
                       <span className={`text-xs font-black ${p.type === 'income' ? 'text-emerald-500' : 'text-slate-900'}`}>
                         {p.type === 'income' ? '+' : '-'}₹{p.amount.toLocaleString('en-IN')}
@@ -319,13 +306,13 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ onAdd, onBulkAdd }) =
                     onClick={() => setImportStage('mapping')}
                     className="flex-1 py-3 border border-slate-200 rounded-xl text-[10px] font-black uppercase tracking-widest text-slate-500 hover:bg-slate-50 transition-all"
                   >
-                    Adjust Mapping
+                    RESET_MAPPING
                   </button>
                   <button 
                     onClick={finalizeImport}
                     className="flex-1 py-3 bg-blue-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-blue-700 transition-all shadow-lg shadow-blue-500/10"
                   >
-                    Ingest All
+                    CONFIRM_INGESTION
                   </button>
                 </div>
               </div>
@@ -364,7 +351,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ onAdd, onBulkAdd }) =
                 value={formData.description}
                 onChange={(e) => setFormData({...formData, description: e.target.value})}
                 className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-700 outline-none focus:border-blue-500"
-                placeholder="Where was it spent?"
+                placeholder="Merchant or label"
                 required
               />
             </div>
@@ -394,7 +381,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ onAdd, onBulkAdd }) =
               type="submit"
               className="w-full py-4 bg-blue-600 text-white rounded-[1.5rem] text-[10px] font-black uppercase tracking-[0.2em] hover:bg-blue-700 transition-all shadow-xl shadow-blue-500/20 active:scale-95"
             >
-              Confirm Transaction
+              RECORD_ENTRY
             </button>
           </form>
         )}

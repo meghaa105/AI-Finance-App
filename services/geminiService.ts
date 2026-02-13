@@ -3,9 +3,20 @@ import { GoogleGenAI, Type } from "@google/genai";
 import { Transaction, FinancialAnalysis, Budget, SavingsGoal, Challenge } from "../types";
 
 export interface UserProfile {
+  name?: string;
   goal?: string;
   riskAppetite?: string;
   lifeStage?: string;
+}
+
+export interface CardSuggestion {
+  cardName: string;
+  bank: string;
+  annualFee: number;
+  rewardRate: string;
+  whyThisCard: string;
+  estMonthlyCashback: number;
+  tier: 'Entry' | 'Mid' | 'Premium';
 }
 
 // Exporting ImageSize type for use in VisionBoard component
@@ -14,10 +25,47 @@ export type ImageSize = '1K' | '2K' | '4K';
 export class GeminiService {
   constructor() {}
 
+  async suggestCreditCards(transactions: Transaction[], profile: UserProfile): Promise<CardSuggestion[]> {
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    const prompt = `Analyze these 50 recent transactions for ${profile.name || 'the user'}: ${JSON.stringify(transactions.slice(0, 50))}.
+    Based on their top spending categories (e.g., Food, Travel, Utilities, Shopping), suggest 3 Indian credit cards that offer the best rewards/cashback.
+    
+    Return JSON array: [{ "cardName": "...", "bank": "...", "annualFee": 0, "rewardRate": "...", "whyThisCard": "...", "estMonthlyCashback": 0, "tier": "Entry|Mid|Premium" }]`;
+
+    try {
+      const response = await ai.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: prompt,
+        config: {
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                cardName: { type: Type.STRING },
+                bank: { type: Type.STRING },
+                annualFee: { type: Type.NUMBER },
+                rewardRate: { type: Type.STRING },
+                whyThisCard: { type: Type.STRING },
+                estMonthlyCashback: { type: Type.NUMBER },
+                tier: { type: Type.STRING }
+              },
+              required: ["cardName", "bank", "annualFee", "rewardRate", "whyThisCard", "estMonthlyCashback", "tier"]
+            }
+          }
+        }
+      });
+      return JSON.parse(response.text || '[]');
+    } catch (e) {
+      return [];
+    }
+  }
+
   async generatePersonalizedQuest(transactions: Transaction[], profile: UserProfile): Promise<Partial<Challenge>> {
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     const prompt = `Analyze these transactions: ${JSON.stringify(transactions.slice(0, 50))}.
-    The user profile is: ${JSON.stringify(profile)}.
+    The user profile is: ${JSON.stringify(profile)}. User Name: ${profile.name || 'Anonymous'}.
     
     Identify the user's biggest financial "weakness" (category or specific merchant).
     Generate a "Boss Battle" quest to fix it. 
@@ -101,17 +149,18 @@ export class GeminiService {
   async analyzeFinance(
     transactions: Transaction[], 
     budgets: Budget[], 
-    goals: SavingsGoal[]
+    goals: SavingsGoal[],
+    profile: UserProfile
   ): Promise<FinancialAnalysis> {
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-    const prompt = `You are a legendary GenZ Wealth Sensei. Analyze this financial profile:
+    const prompt = `You are a legendary GenZ Wealth Sensei. Analyze this financial profile for ${profile.name || 'the user'}:
     Transactions: ${JSON.stringify(transactions)}
     Budgets: ${JSON.stringify(budgets)}
     Goals: ${JSON.stringify(goals)}
     
     Provide:
     1. Health score (0-100).
-    2. A savage but helpful vibe-check summary of spending. Use punchy GenZ terminology (main character energy, side hustle, L, W, valid, cap).
+    2. A savage but helpful vibe-check summary of spending. Address the user by name. Use punchy GenZ terminology (main character energy, side hustle, L, W, valid, cap).
     3. 3 strategic "W" moves tailored for the Indian market (SIPs, specific stock sectors, or high-yield savings).
     4. Monthly savings potential in ₹.
     `;
@@ -151,11 +200,12 @@ export class GeminiService {
 
   async askFinanceQuestion(question: string, context: any, profile: UserProfile): Promise<string> {
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-    const prompt = `User Profile: ${JSON.stringify(profile)}
+    const prompt = `User Name: ${profile.name || 'Friend'}
+    User Profile: ${JSON.stringify(profile)}
     Financial Context: ${JSON.stringify(context)}
     User Question: ${question}
     
-    Respond as a cool, hyper-intelligent GenZ Wealth Sensei. Use Markdown, bolding, and plenty of emojis. Keep it punchy and direct. No corporate speak.`;
+    Respond as a cool, hyper-intelligent GenZ Wealth Sensei. Use the user's name periodically. Use Markdown, bolding, and plenty of emojis. Keep it punchy and direct. No corporate speak.`;
     
     try {
       const response = await ai.models.generateContent({
@@ -171,19 +221,19 @@ export class GeminiService {
   async analyzeRawData(text: string, profile: UserProfile): Promise<string> {
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     
-    // Enhanced prompt to ensure Savings Goals (Side Quests) are highlighted
     const prompt = `
-    TASK: Perform a high-fidelity financial audit.
+    TASK: Perform a high-fidelity financial audit for ${profile.name || 'this user'}.
     DATA: ${text}
     USER_PROFILE: ${JSON.stringify(profile)}
 
     INSTRUCTIONS:
-    1. If the data includes "goals" or "Side Quests" (e.g., iPhone 16 Pro), you MUST create a dedicated section called "QUEST_REALITY_CHECK".
-    2. Calculate the "Probability of W" for each goal based on current spending patterns.
-    3. Use Markdown tables to compare Budget vs Reality.
-    4. Spot anomalies and "L" moves.
-    5. Speak like a legendary GenZ Wealth Sensei. Be savage but helpful.
-    6. Bold key terms and use emojis.
+    1. Scan the data for names (e.g., in NEFT descriptions). If you see a name like "MEGHA AGARWAL" and it matches the profile, treat those as primary flows.
+    2. If the data includes "goals" or "Side Quests", you MUST create a dedicated section called "QUEST_REALITY_CHECK".
+    3. Calculate the "Probability of W" for each goal based on current spending patterns.
+    4. Use Markdown tables to compare Budget vs Reality.
+    5. Spot anomalies and "L" moves.
+    6. Speak like a legendary GenZ Wealth Sensei. Address the user directly by name. Be savage but helpful.
+    7. Bold key terms and use emojis.
     `;
     
     try {
@@ -197,19 +247,15 @@ export class GeminiService {
     }
   }
 
-  // Implementation of generateGoalVisual for VisionBoard.tsx
   async generateGoalVisual(prompt: string, size: ImageSize): Promise<string | null> {
-    // Check if API Key selection is needed for pro image model as per guidelines
     const win = window as any;
     if (typeof window !== 'undefined' && win.aistudio) {
       const hasKey = await win.aistudio.hasSelectedApiKey();
       if (!hasKey) {
         await win.aistudio.openSelectKey();
-        // Assuming success as per race condition mitigation guidelines
       }
     }
 
-    // Creating a new GoogleGenAI instance right before the call to use the latest API key
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     
     try {
@@ -226,7 +272,6 @@ export class GeminiService {
         },
       });
 
-      // Find the image part in candidates
       const parts = response.candidates?.[0]?.content?.parts;
       if (parts) {
         for (const part of parts) {
@@ -238,7 +283,6 @@ export class GeminiService {
       return null;
     } catch (error: any) {
       console.error("Vision Synthesis Error:", error);
-      // Reset key selection if entity not found error occurs
       if (error?.message?.includes("Requested entity was not found.") && typeof window !== 'undefined' && win.aistudio) {
         await win.aistudio.openSelectKey();
       }

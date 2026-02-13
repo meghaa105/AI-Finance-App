@@ -48,6 +48,12 @@ const BossBattle: React.FC<BossBattleProps> = ({ transactions, profile }) => {
     }
   };
 
+  const handleNextQuest = () => {
+    setOutcome(null);
+    setActiveChallenge(null);
+    startChallenge();
+  };
+
   const checkStatus = async () => {
     if (!activeChallenge) return;
     setLoading(true);
@@ -133,7 +139,7 @@ const BossBattle: React.FC<BossBattleProps> = ({ transactions, profile }) => {
                 </button>
               ) : (
                 <div className="space-y-4">
-                  <div className={`p-4 rounded-2xl ${outcome.status === 'conquered' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-rose-500/10 text-rose-400'}`}>
+                  <div className={`p-4 rounded-2xl ${outcome.status === 'conquered' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'}`}>
                     <div className="flex items-center justify-between mb-2">
                       <p className="font-pixel text-[10px] uppercase tracking-tighter">
                         {outcome.status === 'conquered' ? 'W_STATUS_SECURED' : 'L_DETECTED'}
@@ -161,10 +167,17 @@ const BossBattle: React.FC<BossBattleProps> = ({ transactions, profile }) => {
                   )}
 
                   <button 
-                    onClick={() => setActiveChallenge(null)}
-                    className="w-full mt-2 text-[8px] font-pixel text-slate-500 uppercase underline hover:text-white transition-colors"
+                    onClick={handleNextQuest}
+                    className="w-full py-4 bg-blue-600 text-white font-pixel text-[8px] rounded-2xl hover:bg-blue-700 transition-all shadow-lg shadow-blue-500/20 active:scale-95"
                   >
-                    Reset Quest
+                    FIND_NEXT_BOSS
+                  </button>
+                  
+                  <button 
+                    onClick={() => setActiveChallenge(null)}
+                    className="w-full text-[8px] font-pixel text-slate-600 uppercase hover:text-slate-400 transition-colors pt-2"
+                  >
+                    Rest in Dojo
                   </button>
                 </div>
               )}
@@ -174,6 +187,12 @@ const BossBattle: React.FC<BossBattleProps> = ({ transactions, profile }) => {
           <div className="text-center py-10 opacity-30 flex flex-col items-center">
             <PixelIcon type="quest" size={48} className="mb-6 grayscale text-white" />
             <p className="text-[9px] font-black uppercase tracking-[0.4em] text-white font-pixel">No active quest detected</p>
+            <button 
+              onClick={startChallenge}
+              className="mt-6 font-pixel text-[8px] border border-white/20 text-white px-6 py-3 rounded-2xl hover:bg-white/5 transition-all"
+            >
+              GENERATE_MISSION
+            </button>
           </div>
         )}
       </div>
